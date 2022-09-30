@@ -1628,7 +1628,7 @@ inline void Executor::_consume_graph(Worker& w, Node* p, Graph& g) {
   }
   p->_join_counter.fetch_add(src.size());
   _schedule(w, src);
-  _loop_until(w, [p] () -> bool { return p->_join_counter == 0; });
+  _loop_until(w, [p] () -> bool { std::this_thread::sleep_for(std::chrono::milliseconds(2)); return p->_join_counter == 0; });
 }
 
 // Procedure: _invoke_condition_task
