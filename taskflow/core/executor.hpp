@@ -1103,6 +1103,9 @@ inline bool Executor::_wait_for_task(Worker& worker, Node*& t) {
     return true;
   }
 
+  // relaxed order because there's explicit seq_cst fence in prepare_wait()
+  size_t prev_num_actives = _num_actives.load(std::memory_order_relaxed);
+
   _notifier.prepare_wait(worker._waiter);
 
   //if(auto vtm = _find_vtm(me); vtm != _workers.size()) {
@@ -1132,7 +1135,12 @@ inline bool Executor::_wait_for_task(Worker& worker, Node*& t) {
   }
 
   if(_num_thieves.fetch_sub(1) == 1) {
-    if(_num_actives) {
+    // Don't check _num_actives if the previous number was non-zero already. Otherwise if there's
+    // a long running task, then _num_actives won't become zero and this thread will perform
+    // infinite busy wait. On certain hardware this may significantly affect the actively running
+    // threads (especially if it's just one thread), because the CPU will turbo-boost its frequency
+    // less.
+    if(prev_num_actives == 0 && _num_actives) {
       _notifier.cancel_wait(worker._waiter);
       goto wait_for_task;
     }
