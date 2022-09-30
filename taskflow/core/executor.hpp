@@ -1817,7 +1817,12 @@ void Executor::run_and_wait(T& target) {
   auto w = _this_worker();
 
   if(w == nullptr) {
-    TF_THROW("run_and_wait must be called by a worker of the executor");
+    Taskflow taskflow;
+    taskflow.emplace([&](tf::Runtime& rt) {
+      rt.run_and_wait(target);
+    });
+    run(std::move(taskflow)).wait();
+    return;
   }
 
   Node parent;  // dummy parent
@@ -1831,7 +1836,12 @@ void Executor::loop_until(P&& predicate) {
   auto w = _this_worker();
 
   if(w == nullptr) {
-    TF_THROW("loop_until must be called by a worker of the executor");
+    Taskflow taskflow;
+    taskflow.emplace([&]() {
+      loop_until(predicate);
+    });
+    run_and_wait(taskflow);
+    return;
   }
 
   _loop_until(*w, std::forward<P>(predicate));
